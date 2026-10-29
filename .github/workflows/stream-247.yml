@@ -6,15 +6,27 @@ on:
       stream_url:
         description: 'Target Website / GitHub Pages URL to Stream'
         required: true
-        default: 'https://yourusername.github.io/your-repo/'
+        default: 'https://bhavyakumar-dev.github.io/yt-alldaystream/'
       duration_hours:
-        description: 'Stream duration in hours (GitHub Actions max is 6h per run)'
+        description: 'Stream duration in hours (GitHub Actions max is 6h per run, recommend 5.5)'
         required: true
-        default: '6'
+        default: '5.5'
+      auto_restart:
+        description: 'Automatically restart stream when this run finishes? (true/false)'
+        required: true
+        default: 'true'
+  schedule:
+    # Optional fallback cron trigger every 6 hours
+    - cron: '0 */6 * * *'
+
+permissions:
+  actions: write
+  contents: read
 
 jobs:
   stream:
     runs-on: ubuntu-latest
+    timeout-minutes: 360 # 6 hours max GitHub limit
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -24,21 +36,35 @@ jobs:
         with:
           node-version: 20
 
-      - name: Install FFmpeg & Chromium Dependencies
+      - name: Install FFmpeg & System Dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y ffmpeg xvfb libnss3 libatk1.0-0 libatk-bridge2.0-0 libcups2 libdrm2 libxkbcommon-x11-0 libxcomposite1 libxdamage1 libxrandr2 libgbm1 libasound2
+          sudo apt-get install -y ffmpeg xvfb libnss3 libatk1.0-0 libatk-bridge2.0-0 libcups2 libdrm2 libxkbcommon-x11-0 libxcomposite1 libxdamage1 libxrandr2 libgbm1
+          # Handle Ubuntu 24.04 (libasound2t64) and Ubuntu 22.04 (libasound2)
+          sudo apt-get install -y libasound2t64 2>/dev/null || sudo apt-get install -y libasound2 2>/dev/null || true
 
-      - name: Install Node Dependencies
+      - name: Install Node Dependencies & Browser
         run: |
           cd headless-cloud
           npm install
+          npx puppeteer browsers install chrome
 
       - name: Launch 24/7 Headless Streamer
         env:
-          PAGE_URL: ${{ github.event.inputs.stream_url }}
+          PAGE_URL: ${{ github.event.inputs.stream_url || 'https://bhavyakumar-dev.github.io/yt-alldaystream/' }}
           YOUTUBE_STREAM_KEY: ${{ secrets.YOUTUBE_STREAM_KEY }}
-          DURATION_HOURS: ${{ github.event.inputs.duration_hours }}
+          DURATION_HOURS: ${{ github.event.inputs.duration_hours || '5.5' }}
         run: |
           cd headless-cloud
           xvfb-run --server-args="-screen 0 1920x1080x24" node stream_headless.js
+
+      - name: Auto-Restart Stream Loop
+        if: ${{ github.event.inputs.auto_restart == 'true' || github.event_name == 'schedule' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          echo "🔄 Triggering next 5.5-hour stream cycle..."
+          gh workflow run stream-247.yml \
+            -f stream_url="${{ github.event.inputs.stream_url || 'https://bhavyakumar-dev.github.io/yt-alldaystream/' }}" \
+            -f duration_hours="${{ github.event.inputs.duration_hours || '5.5' }}" \
+            -f auto_restart="true"

@@ -8,10 +8,10 @@
 const puppeteer = require('puppeteer');
 const { spawn } = require('child_process');
 
-const PAGE_URL = process.env.PAGE_URL || 'http://localhost:8080';
+const PAGE_URL = process.env.PAGE_URL || 'https://bhavyakumar-dev.github.io/yt-alldaystream/';
 const STREAM_KEY = process.env.YOUTUBE_STREAM_KEY;
 const RTMP_URL = process.env.RTMP_URL || 'rtmp://a.rtmp.youtube.com/live2';
-const DURATION_HOURS = parseFloat(process.env.DURATION_HOURS || '6');
+const DURATION_HOURS = parseFloat(process.env.DURATION_HOURS || '5.5');
 
 if (!STREAM_KEY) {
   console.error("❌ ERROR: YOUTUBE_STREAM_KEY environment variable is required.");
@@ -19,6 +19,7 @@ if (!STREAM_KEY) {
 }
 
 const targetRtmp = `${RTMP_URL}/${STREAM_KEY}`;
+let isPlannedShutdown = false;
 
 async function run() {
   console.log(`🌐 Launching Headless Chromium for URL: ${PAGE_URL}`);
@@ -38,16 +39,7 @@ async function run() {
 
   const page = await browser.newPage();
   await page.setViewport({ width: 1920, height: 1080 });
-  await page.goto(PAGE_URL, { waitUntil: 'networkidle2' });
-
-  // Optional: trigger full-screen / clean view if available
-  await page.evaluate(() => {
-    // If running StreamCraft UI, automatically click fullscreen or clean preview
-    const canvas = document.getElementById('streamCanvas');
-    if (canvas && canvas.requestFullscreen) {
-      // already 1920x1080 viewport
-    }
-  });
+  await page.goto(PAGE_URL, { waitUntil: 'networkidle2', timeout: 60000 });
 
   console.log("🚀 Initializing FFmpeg capture from X11 display :0.0...");
 
@@ -81,27 +73,38 @@ async function run() {
   ]);
 
   ffmpeg.stderr.on('data', (data) => {
-    // Print progress lines
     const msg = data.toString();
     if (msg.includes('fps=') || msg.includes('bitrate=')) {
       process.stdout.write(`\r📡 [Streaming] ${msg.trim()}`);
     }
   });
 
-  ffmpeg.on('close', (code) => {
-    console.log(`\nFFmpeg exited with code ${code}`);
-    browser.close();
-    process.exit(code || 0);
+  ffmpeg.on('close', async (code) => {
+    console.log(`\nFFmpeg process exited with code ${code} (planned: ${isPlannedShutdown})`);
+    try {
+      await browser.close();
+    } catch (e) {}
+
+    if (isPlannedShutdown) {
+      process.exit(0);
+    } else {
+      process.exit(code === 0 ? 0 : (code || 0));
+    }
   });
 
-  // Run for requested duration
-  const timeoutMs = DURATION_HOURS * 3600 * 1000;
-  console.log(`⏳ Streaming scheduled for ${DURATION_HOURS} hour(s)...`);
+  // Scheduled shutdown slightly before GitHub Actions 6-hour limit
+  const timeoutMs = Math.floor(DURATION_HOURS * 3600 * 1000);
+  console.log(`⏳ Streaming scheduled for ${DURATION_HOURS} hour(s) (${Math.round(timeoutMs / 60000)} mins)...`);
 
   setTimeout(() => {
-    console.log("\n⏰ Scheduled duration completed. Shutting down stream cleanly...");
-    ffmpeg.stdin.end();
-    ffmpeg.kill('SIGINT');
+    console.log("\n⏰ Scheduled duration completed. Performing planned clean shutdown...");
+    isPlannedShutdown = true;
+    try {
+      ffmpeg.stdin.end();
+      ffmpeg.kill('SIGINT');
+    } catch (e) {
+      process.exit(0);
+    }
   }, timeoutMs);
 }
 
