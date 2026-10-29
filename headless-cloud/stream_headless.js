@@ -25,17 +25,20 @@ let ffmpegLogs = [];
 async function run() {
   const currentDisplay = process.env.DISPLAY || ':99';
   console.log(`🖥️ Active X11 Display: ${currentDisplay}`);
-  console.log(`🌐 Launching Headless Chromium for URL: ${PAGE_URL}`);
+  console.log(`🌐 Launching Kiosk Chromium for URL: ${PAGE_URL}`);
 
+  // Launch Chromium in Fullscreen Kiosk Mode (1920x1080)
   const browser = await puppeteer.launch({
     headless: false, // Run in virtual X11 frame
-    defaultViewport: { width: 1920, height: 1080 },
+    defaultViewport: null, // Allow window to fill full 1920x1080 screen
     args: [
       '--no-sandbox',
       '--disable-setuid-sandbox',
       '--disable-dev-shm-usage',
       '--disable-gpu',
       '--window-size=1920,1080',
+      '--window-position=0,0',
+      '--kiosk', // Pure fullscreen mode without browser chrome / url bar
       '--start-fullscreen',
       '--autoplay-policy=no-user-gesture-required',
       '--hide-scrollbars'
@@ -45,16 +48,50 @@ async function run() {
   const page = await browser.newPage();
   await page.setViewport({ width: 1920, height: 1080 });
 
-  console.log("⏳ Loading stream page...");
+  console.log("⏳ Loading website content...");
   try {
     await page.goto(PAGE_URL, { waitUntil: 'networkidle2', timeout: 60000 });
+    await page.waitForFunction(() => document.readyState === 'complete');
   } catch (err) {
-    console.warn("⚠️ Page load timeout warning, proceeding anyway:", err.message);
+    console.warn("⚠️ Page load warning, proceeding anyway:", err.message);
   }
 
-  // Allow 3 seconds for page and fonts to render cleanly
-  console.log("⏳ Initializing render buffer...");
-  await new Promise(r => setTimeout(r, 3000));
+  // Ensure body is loaded and rendered
+  try {
+    await page.waitForSelector('body', { timeout: 10000 });
+  } catch (e) {}
+
+  // Allow 5 seconds for web fonts, stylesheets, and images to fully render
+  console.log("⏳ Allowing 5s for page styles & fonts to paint...");
+  await new Promise(r => setTimeout(r, 5000));
+
+  // Inject smooth gentle auto-scroll so viewers see the full website moving dynamically
+  console.log("📜 Initializing smooth auto-scrolling engine...");
+  await page.evaluate(() => {
+    let direction = 1;
+    let pauseCounter = 0;
+
+    setInterval(() => {
+      const maxScroll = document.body.scrollHeight - window.innerHeight;
+      if (maxScroll <= 0) return;
+
+      // Pause at the top or bottom for 4 seconds before reversing
+      if (pauseCounter > 0) {
+        pauseCounter--;
+        return;
+      }
+
+      window.scrollBy({ top: 1.2 * direction, behavior: 'auto' });
+
+      if (window.scrollY >= maxScroll - 4 && direction === 1) {
+        direction = -1;
+        pauseCounter = 100; // ~4 seconds pause at bottom
+      } else if (window.scrollY <= 4 && direction === -1) {
+        direction = 1;
+        pauseCounter = 100; // ~4 seconds pause at top
+      }
+    }, 40);
+  });
 
   // Determine correct X11 input for FFmpeg x11grab
   const x11Input = currentDisplay.includes('.') ? currentDisplay : `${currentDisplay}.0`;
@@ -97,7 +134,7 @@ async function run() {
     if (ffmpegLogs.length > 80) ffmpegLogs.shift();
 
     if (msg.includes('fps=') || msg.includes('bitrate=')) {
-      process.stdout.write(`\r📡 [Streaming] ${msg.trim()}`);
+      process.stdout.write(`\r📡 [Streaming Live] ${msg.trim()}`);
     } else if (msg.toLowerCase().includes('error') || msg.toLowerCase().includes('cannot') || msg.toLowerCase().includes('failed')) {
       console.error(`\n⚠️ [FFmpeg]: ${msg.trim()}`);
     }

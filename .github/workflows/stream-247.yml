@@ -1,8 +1,6 @@
 name: 24/7 Cloud YouTube Streamer
 
 on:
-  push:
-    branches: [ main ]
   workflow_dispatch:
     inputs:
       stream_url:
@@ -65,7 +63,7 @@ jobs:
           xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24 -ac" node stream_headless.js
 
       - name: Auto-Restart Stream Loop
-        if: ${{ github.event.inputs.auto_restart == 'true' || github.event_name == 'push' || github.event_name == 'schedule' }}
+        if: ${{ github.event.inputs.auto_restart == 'true' || github.event_name == 'schedule' }}
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
