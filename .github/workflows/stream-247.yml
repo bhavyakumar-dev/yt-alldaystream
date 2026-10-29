@@ -56,7 +56,7 @@ jobs:
           DURATION_HOURS: ${{ github.event.inputs.duration_hours || '5.5' }}
         run: |
           cd headless-cloud
-          xvfb-run --server-args="-screen 0 1920x1080x24" node stream_headless.js
+          xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24 -ac" node stream_headless.js
 
       - name: Auto-Restart Stream Loop
         if: ${{ github.event.inputs.auto_restart == 'true' || github.event_name == 'schedule' }}

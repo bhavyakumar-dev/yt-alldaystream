@@ -20,8 +20,11 @@ if (!STREAM_KEY) {
 
 const targetRtmp = `${RTMP_URL}/${STREAM_KEY}`;
 let isPlannedShutdown = false;
+let ffmpegLogs = [];
 
 async function run() {
+  const currentDisplay = process.env.DISPLAY || ':99';
+  console.log(`🖥️ Active X11 Display: ${currentDisplay}`);
   console.log(`🌐 Launching Headless Chromium for URL: ${PAGE_URL}`);
 
   const browser = await puppeteer.launch({
@@ -31,38 +34,55 @@ async function run() {
       '--no-sandbox',
       '--disable-setuid-sandbox',
       '--disable-dev-shm-usage',
+      '--disable-gpu',
       '--window-size=1920,1080',
       '--start-fullscreen',
-      '--autoplay-policy=no-user-gesture-required'
+      '--autoplay-policy=no-user-gesture-required',
+      '--hide-scrollbars'
     ]
   });
 
   const page = await browser.newPage();
   await page.setViewport({ width: 1920, height: 1080 });
-  await page.goto(PAGE_URL, { waitUntil: 'networkidle2', timeout: 60000 });
 
-  console.log("🚀 Initializing FFmpeg capture from X11 display :0.0...");
+  console.log("⏳ Loading stream page...");
+  try {
+    await page.goto(PAGE_URL, { waitUntil: 'networkidle2', timeout: 60000 });
+  } catch (err) {
+    console.warn("⚠️ Page load timeout warning, proceeding anyway:", err.message);
+  }
+
+  // Allow 3 seconds for canvas & fonts to fully initialize
+  console.log("⏳ Initializing canvas render buffer...");
+  await new Promise(r => setTimeout(r, 3000));
+
+  // Determine correct X11 input for FFmpeg x11grab
+  // E.g. if DISPLAY is ":99", x11grab requires ":99.0" or ":99"
+  const x11Input = currentDisplay.includes('.') ? currentDisplay : `${currentDisplay}.0`;
+  console.log(`🚀 Initializing FFmpeg capture from X11 display: ${x11Input}...`);
 
   const ffmpeg = spawn('ffmpeg', [
     // Video input from virtual X11 screen
     '-f', 'x11grab',
     '-video_size', '1920x1080',
     '-framerate', '30',
-    '-i', ':0.0+0,0',
+    '-draw_mouse', '0',
+    '-i', x11Input,
 
     // Audio input: generate continuous silent audio carrier for YouTube encoder
     '-f', 'lavfi',
     '-i', 'anullsrc=channel_layout=stereo:sample_rate=44100',
 
-    // Video encoding settings
+    // Video encoding settings (H.264 / CBR for YouTube Live)
     '-c:v', 'libx264',
     '-preset', 'veryfast',
+    '-b:v', '3500k',
     '-maxrate', '3500k',
     '-bufsize', '7000k',
     '-pix_fmt', 'yuv420p',
     '-g', '60', // Keyframe every 2 seconds
 
-    // Audio encoding settings
+    // Audio encoding settings (AAC 128k stereo)
     '-c:a', 'aac',
     '-b:a', '128k',
     '-ar', '44100',
@@ -74,13 +94,22 @@ async function run() {
 
   ffmpeg.stderr.on('data', (data) => {
     const msg = data.toString();
+    ffmpegLogs.push(msg);
+    if (ffmpegLogs.length > 80) ffmpegLogs.shift();
+
     if (msg.includes('fps=') || msg.includes('bitrate=')) {
       process.stdout.write(`\r📡 [Streaming] ${msg.trim()}`);
+    } else if (msg.toLowerCase().includes('error') || msg.toLowerCase().includes('cannot') || msg.toLowerCase().includes('failed')) {
+      console.error(`\n⚠️ [FFmpeg]: ${msg.trim()}`);
     }
   });
 
   ffmpeg.on('close', async (code) => {
     console.log(`\nFFmpeg process exited with code ${code} (planned: ${isPlannedShutdown})`);
+    if (code !== 0 && !isPlannedShutdown) {
+      console.error("❌ FFmpeg error logs:\n" + ffmpegLogs.join(''));
+    }
+
     try {
       await browser.close();
     } catch (e) {}
@@ -88,7 +117,7 @@ async function run() {
     if (isPlannedShutdown) {
       process.exit(0);
     } else {
-      process.exit(code === 0 ? 0 : (code || 0));
+      process.exit(code === 0 ? 0 : (code || 1));
     }
   });
 
