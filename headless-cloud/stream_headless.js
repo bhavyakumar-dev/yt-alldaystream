@@ -8,7 +8,7 @@
 const puppeteer = require('puppeteer');
 const { spawn } = require('child_process');
 
-const PAGE_URL = process.env.PAGE_URL || 'https://bhavyakumar-dev.github.io/yt-alldaystream/';
+const PAGE_URL = process.env.PAGE_URL || 'https://careerwithenglish.pages.dev/';
 const STREAM_KEY = process.env.YOUTUBE_STREAM_KEY;
 const RTMP_URL = process.env.RTMP_URL || 'rtmp://a.rtmp.youtube.com/live2';
 const DURATION_HOURS = parseFloat(process.env.DURATION_HOURS || '5.5');
@@ -52,12 +52,11 @@ async function run() {
     console.warn("⚠️ Page load timeout warning, proceeding anyway:", err.message);
   }
 
-  // Allow 3 seconds for canvas & fonts to fully initialize
-  console.log("⏳ Initializing canvas render buffer...");
+  // Allow 3 seconds for page and fonts to render cleanly
+  console.log("⏳ Initializing render buffer...");
   await new Promise(r => setTimeout(r, 3000));
 
   // Determine correct X11 input for FFmpeg x11grab
-  // E.g. if DISPLAY is ":99", x11grab requires ":99.0" or ":99"
   const x11Input = currentDisplay.includes('.') ? currentDisplay : `${currentDisplay}.0`;
   console.log(`🚀 Initializing FFmpeg capture from X11 display: ${x11Input}...`);
 
