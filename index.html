@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>StreamCraft 24/7 — Live Text & Website Broadcaster</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220%22 width=%22100%22 height=%22100%22><text y=%22.9em%22 font-size=%2290%22>📡</text></svg>">
+  <meta name="description" content="Hostable on GitHub Pages or Cloudflare Pages: 24/7 Live Stream broadcaster for custom text, websites, and audio to YouTube Live, Cloudflare Stream, and RTMP/WHIP with your Stream ID.">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Top Navigation Header -->
+    <header class="top-nav">
+      <div class="brand">
+        <span class="brand-icon">📡</span>
+        <div class="brand-text">
+          <h1>StreamCraft <span class="badge-version">24/7</span></h1>
+          <p class="subtitle">Cloud & Browser Live Broadcaster for YouTube & Cloudflare</p>
+        </div>
+      </div>
+
+      <div class="status-bar">
+        <div class="status-item" id="wakeLockStatus" title="Prevents screen/tab from sleeping">
+          <span class="status-dot warning" id="wakeLockDot"></span>
+          <span class="status-label">WakeLock: <b id="wakeLockText">Inactive</b></span>
+        </div>
+        <div class="status-item" id="workerStatus" title="Background Web Worker ticker to defeat browser tab throttling">
+          <span class="status-dot active"></span>
+          <span class="status-label">Worker: <b>Running</b></span>
+        </div>
+        <div class="status-item broadcast-status" id="broadcastStatus">
+          <span class="status-dot offline" id="broadcastDot"></span>
+          <span class="status-label" id="broadcastText">OFFLINE</span>
+        </div>
+        <div class="uptime-counter" id="uptimeDisplay" title="Stream Uptime">
+          ⏱️ 00:00:00
+        </div>
+      </div>
+    </header>
+
+    <!-- Main Workspace -->
+    <main class="workspace-grid">
+      <!-- Left Column: Video Preview & Live Controls -->
+      <section class="preview-panel">
+        <div class="canvas-wrapper">
+          <canvas id="streamCanvas" width="1920" height="1080"></canvas>
+          <div class="canvas-overlay-badges">
+            <span class="live-pill" id="liveIndicator">● OFFLINE</span>
+            <span class="resolution-pill" id="resolutionTag">1080p 30fps</span>
+          </div>
+          <!-- Hidden video element for capturing tab/screen -->
+          <video id="screenCaptureVideo" autoplay playsinline muted style="display:none;"></video>
+        </div>
+
+        <!-- Preview Quick Actions Bar -->
+        <div class="preview-actions">
+          <div class="stats-group">
+            <span class="stat-tag"><span class="stat-name">FPS:</span> <b id="fpsStat">30</b></span>
+            <span class="stat-tag"><span class="stat-name">Audio:</span> <b id="audioStat">Silent Carrier</b></span>
+            <span class="stat-tag"><span class="stat-name">Target:</span> <b id="targetStat">YouTube Live</b></span>
+          </div>
+          <div class="button-group">
+            <button id="pipBtn" class="btn btn-secondary btn-sm" title="Pop-out Picture-in-Picture window">
+              🖼️ Picture-in-Picture
+            </button>
+            <button id="fullscreenBtn" class="btn btn-secondary btn-sm" title="Preview Fullscreen">
+              ⛶ Fullscreen
+            </button>
+          </div>
+        </div>
+
+        <!-- Master Broadcast Control Bar -->
+        <div class="master-broadcast-card">
+          <div class="broadcast-meta">
+            <h3>Master Ingest Controls</h3>
+            <p>Runs continuously in this browser tab. Keep tab open or use headless companion.</p>
+          </div>
+          <div class="broadcast-buttons">
+            <button id="toggleStreamBtn" class="btn btn-primary btn-lg">
+              <span class="btn-icon">🔴</span>
+              <span id="streamBtnText">START 24/7 BROADCAST</span>
+            </button>
+            <button id="toggleWakeLockBtn" class="btn btn-secondary">
+              <span class="btn-icon">☕</span> Keep Tab Awake
+            </button>
+          </div>
+        </div>
+
+        <!-- Stream Guide & Quick Diagnostic Info -->
+        <div class="info-alert-card">
+          <div class="info-icon">💡</div>
+          <div class="info-content">
+            <h4>How "Stream with Stream ID" Works on GitHub/Cloudflare Pages:</h4>
+            <p>
+              Static sites execute client-side in the browser. You have 3 easy ways to stream all day:
+            </p>
+            <ul>
+              <li><b>Method 1 (Easiest - 100% Free, Zero Setup):</b> Use YouTube Studio's "Webcam" stream mode, pick this tab as the video/audio source. It streams to YouTube with 0 plugins!</li>
+              <li><b>Method 2 (Cloudflare Stream WHIP):</b> Paste your Cloudflare Stream ID & Token below to broadcast serverlessly via standard WebRTC WHIP.</li>
+              <li><b>Method 3 (Classic YouTube RTMP Key):</b> Connect using the included lightweight 1-click RTMP relay or the headless 24/7 cloud workflow.</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <!-- Right Column: Settings & Customizer Tabs -->
+      <aside class="control-panel">
+        <nav class="tab-nav">
+          <button class="tab-btn active" data-tab="tab-content">📝 Content & Text</button>
+          <button class="tab-btn" data-tab="tab-stream">📡 Stream & ID</button>
+          <button class="tab-btn" data-tab="tab-audio">🎵 Audio</button>
+          <button class="tab-btn" data-tab="tab-design">🎨 Design</button>
+          <button class="tab-btn" data-tab="tab-cloud">☁️ 24/7 Deploy</button>
+        </nav>
+
+        <div class="tab-content-container">
+          <!-- TAB 1: Content & Text -->
+          <div class="tab-pane active" id="tab-content">
+            <div class="form-section">
+              <label class="section-title">Broadcast Video Mode</label>
+              <div class="radio-cards">
+                <label class="radio-card">
+                  <input type="radio" name="videoSourceMode" value="text" checked>
+                  <div class="radio-card-body">
+                    <span class="radio-icon">📜</span>
+                    <span class="radio-title">Dynamic Text & Ticker</span>
+                    <span class="radio-desc">Studio graphics, custom headline, live clock, scrolling marquee</span>
+                  </div>
+                </label>
+                <label class="radio-card">
+                  <input type="radio" name="videoSourceMode" value="website">
+                  <div class="radio-card-body">
+                    <span class="radio-icon">🌐</span>
+                    <span class="radio-title">Stream Any Website / Tab</span>
+                    <span class="radio-desc">Capture another browser tab or website at 1080p with live overlay</span>
+                  </div>
+                </label>
+              </div>
+            </div>
+
+            <!-- Website Source Controls (shown when website mode chosen) -->
+            <div id="websiteCaptureControls" class="form-section" style="display:none;">
+              <label class="section-title">Website / Screen Source</label>
+              <p class="field-hint">Select the browser tab, window, or monitor displaying the website you want to stream all day.</p>
+              <div class="input-row">
+                <button id="startCaptureBtn" class="btn btn-accent btn-block">
+                  🖥️ Choose Browser Tab / Website to Stream
+                </button>
+              </div>
+              <div class="input-row" style="margin-top: 10px;">
+                <label class="checkbox-inline">
+                  <input type="checkbox" id="showOverlayOnWebsite" checked>
+                  Show banner overlay & live clock on top of website stream
+                </label>
+              </div>
+            </div>
+
+            <!-- Text Content Controls -->
+            <div id="textContentControls">
+              <div class="form-group">
+                <label for="streamTitle">Main Stream Headline / Title</label>
+                <input type="text" id="streamTitle" class="form-input" value="24/7 LIVE STREAM BROADCAST" placeholder="Enter headline...">
+              </div>
+
+              <div class="form-group">
+                <label for="streamSubtitle">Subtitle / Tagline</label>
+                <input type="text" id="streamSubtitle" class="form-input" value="Streaming Live All Day • Powered by StreamCraft" placeholder="Enter subtitle...">
+              </div>
+
+              <div class="form-group">
+                <label for="noticeBox">Central Message / Announcement Box (Multi-line)</label>
+                <textarea id="noticeBox" class="form-textarea" rows="4" placeholder="Enter custom message, updates, rules, or live notices...">Welcome to our 24/7 continuous broadcast.
+Updates, live status, and news are automatically synced here.
+Leave a comment in chat and subscribe for daily updates!</textarea>
+              </div>
+
+              <div class="form-group">
+                <label for="tickerText">Bottom Scrolling Ticker / Marquee</label>
+                <input type="text" id="tickerText" class="form-input" value="🚨 BREAKING: 24/7 Live Stream is running smoothly • Stay tuned for live updates • Don't forget to like and subscribe • Powered by GitHub / Cloudflare Pages 🚨" placeholder="Enter marquee text...">
+              </div>
+
+              <div class="form-row">
+                <div class="form-group col-6">
+                  <label for="tickerSpeed">Ticker Speed (px/frame)</label>
+                  <input type="range" id="tickerSpeed" min="1" max="10" value="3" class="form-range">
+                  <span class="range-value" id="tickerSpeedVal">3</span>
+                </div>
+                <div class="form-group col-6">
+                  <label for="clockFormat">Live Clock Display</label>
+                  <select id="clockFormat" class="form-select">
+                    <option value="both" selected>Local & UTC Clock</option>
+                    <option value="local">Local Time Only</option>
+                    <option value="utc">UTC Time Only</option>
+                    <option value="none">Hidden</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- TAB 2: Stream & ID -->
+          <div class="tab-pane" id="tab-stream">
+            <div class="form-section">
+              <label class="section-title">Streaming Platform / Target</label>
+              <div class="platform-tabs">
+                <button class="platform-pill active" data-platform="youtube">YouTube Live (Google)</button>
+                <button class="platform-pill" data-platform="cloudflare">Cloudflare Stream</button>
+                <button class="platform-pill" data-platform="custom-whip">Custom WHIP / WebRTC</button>
+              </div>
+            </div>
+
+            <!-- YouTube Configuration -->
+            <div id="youtubeConfig" class="platform-config-section">
+              <div class="config-banner">
+                <img src="https://www.youtube.com/s/desktop/f7587f0b/img/favicon_32x32.png" alt="YT" class="mini-logo">
+                <div>
+                  <h4>YouTube Live Stream (Google)</h4>
+                  <p>Stream all day to your YouTube channel using your Stream Key / Stream ID.</p>
+                </div>
+              </div>
+
+              <div class="form-group">
+                <label for="ytStreamKey">YouTube Stream Key / Stream ID</label>
+                <div class="input-with-toggle">
+                  <input type="password" id="ytStreamKey" class="form-input" placeholder="xxxx-xxxx-xxxx-xxxx-xxxx" autocomplete="off">
+                  <button type="button" class="btn-toggle-vis" id="toggleKeyVis">👁️</button>
+                </div>
+                <p class="field-hint">Found in YouTube Studio > Go Live > Stream Settings > Stream key.</p>
+              </div>
+
+              <div class="form-group">
+                <label for="ytRtmpUrl">RTMP Ingest Server URL</label>
+                <input type="text" id="ytRtmpUrl" class="form-input" value="rtmp://a.rtmp.youtube.com/live2" readonly>
+              </div>
+
+              <div class="form-group">
+                <label for="ytRelayUrl">WebSocket-to-RTMP Relay Endpoint</label>
+                <input type="text" id="ytRelayUrl" class="form-input" value="ws://localhost:8080" placeholder="ws://localhost:8080 or wss://your-relay-domain.com">
+                <p class="field-hint">Browsers cannot talk direct TCP RTMP due to security sandboxes. Use the included 1-command relay script or <b>Method 1 (YouTube Studio Webcam mode)</b> which requires NO relay!</p>
+              </div>
+
+              <div class="native-studio-shortcut">
+                <h5>🚀 Zero-Relay Method: Stream via YouTube Studio Directly</h5>
+                <ol>
+                  <li>Open <a href="https://studio.youtube.com/channel/mine/livestreaming/webcam" target="_blank" rel="noopener">YouTube Studio Webcam Stream</a> in another tab.</li>
+                  <li>In this app, click <b>"Start 24/7 Broadcast"</b> and then <b>"Picture-in-Picture"</b> or open the Pop-out clean feed.</li>
+                  <li>In YouTube Studio, choose <b>Screen/Tab Share</b> and pick this stream tab. YouTube will broadcast it 24/7 directly!</li>
+                </ol>
+              </div>
+            </div>
+
+            <!-- Cloudflare Stream Configuration -->
+            <div id="cloudflareConfig" class="platform-config-section" style="display:none;">
+              <div class="config-banner">
+                <span class="mini-logo">🧡</span>
+                <div>
+                  <h4>Cloudflare Stream (Live)</h4>
+                  <p>Direct browser-to-Cloudflare streaming via standard WebRTC WHIP (Zero backend needed!).</p>
+                </div>
+              </div>
+
+              <div class="form-group">
+                <label for="cfStreamId">Cloudflare Live Stream ID</label>
+                <input type="text" id="cfStreamId" class="form-input" placeholder="e.g. 6f1b3c4a9d7e...">
+                <p class="field-hint">Found in Cloudflare Dashboard > Stream > Live Inputs > Live Input ID.</p>
+              </div>
+
+              <div class="form-group">
+                <label for="cfWhipUrl">Cloudflare WHIP Endpoint</label>
+                <input type="text" id="cfWhipUrl" class="form-input" placeholder="https://customer-xxxx.cloudflarestream.com/<stream-id>/webRTC/publish">
+                <p class="field-hint">Auto-constructed if you provide your customer subdomain and stream ID.</p>
+              </div>
+
+              <div class="form-group">
+                <label for="cfAuthToken">WHIP Bearer / API Token (Optional)</label>
+                <input type="password" id="cfAuthToken" class="form-input" placeholder="Leave blank if public WHIP ingest">
+              </div>
+            </div>
+
+            <!-- Custom WHIP Configuration -->
+            <div id="customWhipConfig" class="platform-config-section" style="display:none;">
+              <div class="form-group">
+                <label for="customWhipEndpoint">Custom WHIP Endpoint (RFC 9321)</label>
+                <input type="text" id="customWhipEndpoint" class="form-input" placeholder="https://ingest.provider.com/whip">
+              </div>
+              <div class="form-group">
+                <label for="customWhipBearer">Bearer Token / Stream ID</label>
+                <input type="password" id="customWhipBearer" class="form-input" placeholder="Stream Key or Bearer Token">
+              </div>
+            </div>
+
+            <div class="form-section">
+              <label class="section-title">Stream Encoding Quality</label>
+              <div class="form-row">
+                <div class="form-group col-6">
+                  <label for="resolutionSelect">Resolution</label>
+                  <select id="resolutionSelect" class="form-select">
+                    <option value="1080p" selected>1080p (1920x1080)</option>
+                    <option value="720p">720p (1280x720)</option>
+                    <option value="480p">480p (854x480 - Low Bandwidth)</option>
+                  </select>
+                </div>
+                <div class="form-group col-6">
+                  <label for="frameRateSelect">Frame Rate</label>
+                  <select id="frameRateSelect" class="form-select">
+                    <option value="30" selected>30 FPS (Recommended)</option>
+                    <option value="60">60 FPS</option>
+                    <option value="15">15 FPS (Ultra Low CPU)</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- TAB 3: Audio -->
+          <div class="tab-pane" id="tab-audio">
+            <div class="form-section">
+              <label class="section-title">Stream Audio Track</label>
+              <p class="field-hint"><b>Critical Note:</b> YouTube Live and streaming encoders automatically reject or terminate streams if there is no audio track. Choose a synthetic generator or silent carrier.</p>
+
+              <div class="radio-cards">
+                <label class="radio-card">
+                  <input type="radio" name="audioSourceMode" value="silent" checked>
+                  <div class="radio-card-body">
+                    <span class="radio-icon">🔇</span>
+                    <span class="radio-title">Silent Carrier Track (Recommended)</span>
+                    <span class="radio-desc">Generates inaudible audio to satisfy YouTube's encoder with 0 background noise</span>
+                  </div>
+                </label>
+
+                <label class="radio-card">
+                  <input type="radio" name="audioSourceMode" value="lofi">
+                  <div class="radio-card-body">
+                    <span class="radio-icon">🎹</span>
+                    <span class="radio-title">Generative Ambient Synth (Royalty Free)</span>
+                    <span class="radio-desc">Procedural soothing ambient chords generated client-side with Web Audio API</span>
+                  </div>
+                </label>
+
+                <label class="radio-card">
+                  <input type="radio" name="audioSourceMode" value="mic">
+                  <div class="radio-card-body">
+                    <span class="radio-icon">🎙️</span>
+                    <span class="radio-title">Microphone / Audio Line In</span>
+                    <span class="radio-desc">Stream live microphone, virtual audio cable, or system sound</span>
+                  </div>
+                </label>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label for="audioVolume">Audio Output Level</label>
+              <div class="slider-with-meter">
+                <input type="range" id="audioVolume" min="0" max="100" value="80" class="form-range">
+                <span id="volumeVal" class="range-value">80%</span>
+              </div>
+              <div class="audio-vu-meter">
+                <div class="vu-bar" id="vuBar" style="width: 20%;"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- TAB 4: Design -->
+          <div class="tab-pane" id="tab-design">
+            <div class="form-section">
+              <label class="section-title">Studio Visual Theme</label>
+              <div class="theme-grid">
+                <button class="theme-btn active" data-theme="cyberpunk">
+                  <span class="theme-preview" style="background: linear-gradient(135deg, #090d16, #0e172a, #06b6d4);"></span>
+                  Cyber Obsidian
+                </button>
+                <button class="theme-btn" data-theme="gold">
+                  <span class="theme-preview" style="background: linear-gradient(135deg, #181512, #292015, #f59e0b);"></span>
+                  Obsidian Gold
+                </button>
+                <button class="theme-btn" data-theme="emerald">
+                  <span class="theme-preview" style="background: linear-gradient(135deg, #061712, #0d281e, #10b981);"></span>
+                  Matrix Emerald
+                </button>
+                <button class="theme-btn" data-theme="sunset">
+                  <span class="theme-preview" style="background: linear-gradient(135deg, #1b0e1b, #2d142c, #f43f5e);"></span>
+                  Neon Sunset
+                </button>
+                <button class="theme-btn" data-theme="studio">
+                  <span class="theme-preview" style="background: linear-gradient(135deg, #111827, #1f2937, #3b82f6);"></span>
+                  Deep Studio
+                </button>
+              </div>
+            </div>
+
+            <div class="form-section">
+              <label class="section-title">Visual Effects</label>
+              <label class="checkbox-inline">
+                <input type="checkbox" id="enableParticles" checked>
+                Enable Ambient Floating Particles (prevents YouTube codec freeze)
+              </label>
+              <label class="checkbox-inline" style="margin-top: 8px;">
+                <input type="checkbox" id="enableGlow" checked>
+                Enable Neon Header Glow Effects
+              </label>
+            </div>
+
+            <div class="form-section">
+              <label class="section-title">Save & Restore Profile</label>
+              <div class="button-group">
+                <button id="saveConfigBtn" class="btn btn-secondary btn-sm">💾 Save Settings</button>
+                <button id="resetConfigBtn" class="btn btn-secondary btn-sm">🔄 Reset Defaults</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- TAB 5: 24/7 Cloud Deploy -->
+          <div class="tab-pane" id="tab-cloud">
+            <div class="form-section">
+              <label class="section-title">Deploying to GitHub Pages or Cloudflare Pages</label>
+              <div class="guide-steps">
+                <div class="guide-step">
+                  <span class="step-num">1</span>
+                  <div class="step-body">
+                    <h5>Deploy to GitHub Pages (Static Hosting)</h5>
+                    <p>Push this directory to a GitHub repository, go to <b>Settings > Pages</b>, choose <b>main branch / root</b>, and save. Your site is live at <code>https://yourusername.github.io/repo-name/</code>.</p>
+                  </div>
+                </div>
+                <div class="guide-step">
+                  <span class="step-num">2</span>
+                  <div class="step-body">
+                    <h5>Deploy to Cloudflare Pages</h5>
+                    <p>Log in to Cloudflare Dashboard > <b>Workers & Pages</b> > <b>Create application</b> > <b>Pages</b>. Connect your GitHub repo or drag-and-drop this folder. Build command: <i>(none needed)</i>, Output folder: <code>/</code>.</p>
+                  </div>
+                </div>
+                <div class="guide-step">
+                  <span class="step-num">3</span>
+                  <div class="step-body">
+                    <h5>Running 24/7 Without Keeping Your Computer On (Headless Cloud Runner)</h5>
+                    <p>Static GitHub/Cloudflare Pages run in the user's browser. If you want to turn off your computer and stream 24/7 in the cloud, use the included <b>GitHub Actions 24/7 runner</b> or <b>Docker container</b> in the <code>headless-cloud/</code> folder! It runs Headless Chromium + FFmpeg on a cloud server for free.</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </aside>
+    </main>
+  </div>
+
+  <!-- Audio & Rendering Scripts -->
+  <script src="audio-engine.js"></script>
+  <script src="canvas-renderer.js"></script>
+  <script src="streamer.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

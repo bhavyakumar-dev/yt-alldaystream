@@ -1,0 +1,44 @@
+name: 24/7 Cloud YouTube Streamer
+
+on:
+  workflow_dispatch:
+    inputs:
+      stream_url:
+        description: 'Target Website / GitHub Pages URL to Stream'
+        required: true
+        default: 'https://yourusername.github.io/your-repo/'
+      duration_hours:
+        description: 'Stream duration in hours (GitHub Actions max is 6h per run)'
+        required: true
+        default: '6'
+
+jobs:
+  stream:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install FFmpeg & Chromium Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg xvfb libnss3 libatk1.0-0 libatk-bridge2.0-0 libcups2 libdrm2 libxkbcommon-x11-0 libxcomposite1 libxdamage1 libxrandr2 libgbm1 libasound2
+
+      - name: Install Node Dependencies
+        run: |
+          cd headless-cloud
+          npm install
+
+      - name: Launch 24/7 Headless Streamer
+        env:
+          PAGE_URL: ${{ github.event.inputs.stream_url }}
+          YOUTUBE_STREAM_KEY: ${{ secrets.YOUTUBE_STREAM_KEY }}
+          DURATION_HOURS: ${{ github.event.inputs.duration_hours }}
+        run: |
+          cd headless-cloud
+          xvfb-run --server-args="-screen 0 1920x1080x24" node stream_headless.js

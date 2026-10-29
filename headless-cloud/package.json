@@ -1,0 +1,12 @@
+{
+  "name": "streamcraft-headless-cloud",
+  "version": "1.0.0",
+  "description": "Headless Puppeteer + FFmpeg 24/7 Live Streamer for YouTube & RTMP",
+  "main": "stream_headless.js",
+  "scripts": {
+    "start": "node stream_headless.js"
+  },
+  "dependencies": {
+    "puppeteer": "^22.6.0"
+  }
+}
